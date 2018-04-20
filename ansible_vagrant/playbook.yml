@@ -1,0 +1,239 @@
+---
+- hosts: all
+  become: true
+  become_method: sudo
+
+  vars:
+    golang_version: '1.10'
+    terraform_version: '0.11.5'
+    packer_version: '1.2.2'
+    docker_users:
+    - vagrant
+    mailhog_smtp_port: 25
+    mailhog_web_port: 8025
+    jenkins_http_port: 8081
+    jenkins_hostname: jenkins.tutorial-stack.lokal
+    jenkins_admin_username: admin
+    jenkins_admin_password: admin
+    jenkins_plugins:
+    - email-ext
+    - blueocean
+    - build-pipeline-plugin
+    - chucknorris
+    - greenballs
+    - gravatar
+    #- gitlab-plugin
+    #- pipeline-multibranch-defaults
+    - ssh-agent
+    - ssh-credentials
+    #- workflow-multibranch
+    - workflow-scm-step
+    - workflow-aggregator
+    gitlab_use_https: False
+    gitlab_custom_nginx_config: /etc/nginx/conf.d/custom.conf
+    gitlab_external_url: git.tutorial-stack.lokal
+    gitlab_registry_url: docker.tutorial-stack.lokal
+    gitlab_activate_mattermost: true
+    gitlab_mattermost_url: chat.tutorial-stack.lokal
+    gitlab_additional_configs: # e.g. gitlab_rails['gitlab_email_from'] = 'gitlab@tutorial-stack.lokal'
+    - namespace: gitlab_rails
+      var: gitlab_email_from
+      value: "'gitlab@tutorial-stack.lokal'"
+    - namespace: gitlab_rails
+      var: gitlab_email_reply_to
+      value: "'gitlab@tutorial-stack.lokal'"
+    - namespace: gitlab_rails
+      var: smtp_enable
+      value: "true"
+    - namespace: gitlab_rails
+      var: smtp_address
+      value: "'mail.tutorial-stack.local'"
+    - namespace: gitlab_rails
+      var: smtp_port
+      value: 25
+    - namespace: postgresql
+      var: shared_buffers
+      value: "'512MB'"
+    - namespace: mattermost
+      var: email_send_email_notifications
+      value: "true"
+    - namespace: mattermost
+      var: email_smtp_username
+      value: "'gitlab@tutorial-stack.lokal'"
+    - namespace: mattermost
+      var: email_smtp_server
+      value: "'mail.tutorial-stack.local'"
+    - namespace: mattermost
+      var: email_smtp_port
+      value: 25
+    - namespace: mattermost
+      var: email_feedback_name
+      value: "'GitLab Mattermost'"
+    - namespace: mattermost
+      var: email_feedback_email
+      value: "'gitlab@tutorial-stack.lokal'"
+
+  pre_tasks:
+  - name: Include vars.yml
+    include_vars:
+      file: vars.yml
+
+  - name: create /etc/nginx directory
+    file:
+      path: /etc/nginx
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: create /etc/nginx/conf.d directory
+    file:
+      path: /etc/nginx/conf.d
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: create gitlab custom nginx config
+    template:
+        src: custom.nginx.conf.j2
+        dest: /etc/nginx/conf.d/custom.conf
+        owner: root
+        group: root
+        mode: 0755
+
+  roles:
+  - andrelohmann.root_colored_prompt
+  - andrelohmann.docker
+  - andrelohmann.terraform
+  - andrelohmann.packer
+  - andrelohmann.mailhog
+  - geerlingguy.java
+  - geerlingguy.jenkins
+  - andrelohmann.gitlab
+
+  tasks:
+  - name: install packages
+    apt:
+      name: "{{item}}"
+      state: latest
+      dpkg_options: 'force-confnew,force-confdef'
+      autoclean: yes
+      autoremove: yes
+      update_cache: yes
+      cache_valid_time: 3600
+    with_items:
+    - htop
+    - apt-transport-https
+
+  - name: install aws cli
+    pip:
+      name: "{{ item }}"
+      extra_args: --upgrade
+    with_items:
+    - awscli
+    - boto
+
+  - name: create the .aws direcotry for user vagrant
+    file:
+      path: /home/vagrant/.aws
+      state: directory
+      mode: 0755
+
+  - name: create aws config
+    template:
+      src: aws.config.j2
+      dest: /home/vagrant/.aws/config
+      owner: vagrant
+      group: vagrant
+      mode: 0600
+
+  - name: create aws credentials
+    template:
+      src: aws.credentials.j2
+      dest: /home/vagrant/.aws/credentials
+      owner: vagrant
+      group: vagrant
+      mode: 0600
+
+  # Create the Terraform State bucket, add the policy from template file, enable versioning
+  - name: create state bucket
+    s3_bucket:
+      name: "{{ aws_state_bucket }}"
+      aws_access_key: "{{ aws_access_key }}"
+      aws_secret_key: "{{ aws_access_secret }}"
+      region: "{{ aws_region }}"
+      policy: "{{ lookup('template','bucket.policy.json.j2') }}"
+      versioning: yes
+      state: present
+
+  # Create dynamo table for state locking
+  - name: create dynamodb table
+    dynamodb_table:
+      name: "{{ aws_state_dynamo }}"
+      aws_access_key: "{{ aws_access_key }}"
+      aws_secret_key: "{{ aws_access_secret }}"
+      region: "{{ aws_region }}"
+      hash_key_name: LockID
+      hash_key_type: STRING
+      read_capacity: 1
+      write_capacity: 1
+      state: present
+
+  - name: create terraform provider file
+    template:
+      src: terraform.provider.tf.j2
+      dest: /home/vagrant/terraform/provider.tf
+      owner: vagrant
+      group: vagrant
+      mode: 0600
+
+  - name: create terraform backend file
+    template:
+      src: terraform.backend.tf.j2
+      dest: /home/vagrant/terraform/backend.tf
+      owner: vagrant
+      group: vagrant
+      mode: 0600
+
+  # Install go for terraform start/stop wrapper
+  - name: install golang ppa
+    apt_repository:
+      repo: ppa:gophers/archive
+      state: present
+      filename: golang
+
+  - name: install golang
+    apt:
+      name: "golang-{{ golang_version }}"
+      update_cache: yes
+
+  - name: create .go directories
+    file:
+      path: "{{ item.path }}"
+      state: directory
+      owner: "{{ item.owner }}"
+      group: "{{ item.group }}"
+      mode: 0755
+    with_items:
+    - path: /root/.go
+      owner: root
+      group: root
+    - path: /home/vagrant/.go
+      owner: vagrant
+      group: vagrant
+
+  - name: add go binaries and GOPATH to .profile
+    blockinfile:
+      path: "{{ item }}"
+      block: |
+        GOROOT=/usr/lib/go-{{ golang_version }}
+        PATH="$GOROOT/bin:$PATH"
+        GOPATH=$HOME/.go
+      marker: "# go binaries and go path"
+    with_items:
+    - /home/vagrant/.profile
+    - /root/.profile
+
+
+...

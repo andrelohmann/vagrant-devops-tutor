@@ -1,0 +1,12 @@
+/ansible_vagrant/roles
+/ansible_vagrant/vars.yml
+/aws_provisioning/terraform/backend.tf
+/aws_provisioning/terraform/provider.tf
+/aws_provisioning/terraform/.terraform
+/.idea
+/nbproject
+/.vagrant
+.DS_Store
+*.retry
+*.log
+/aws_provisioning

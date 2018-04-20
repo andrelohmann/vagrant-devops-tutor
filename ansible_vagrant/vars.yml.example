@@ -1,0 +1,9 @@
+---
+aws_region: aaa # Your AWS Region
+aws_access_key: xxx # Your AWS Administrator Access Key
+aws_access_secret: yyy # Your AWS Administrator Access Secret
+aws_user_arn: arn:aws:iam::953563704399:user/Admin # ARN of the administrative User, the access credentials belong to
+aws_state_bucket: zzz # secret Bucket holding the Terraform State
+aws_state_dynamo: zzz # dynamodb_table holding the state lock
+aws_route53_domain: y.x.z # The subdomain to work with (route53 nameservers need to be set on provider side)
+...

@@ -1,0 +1,22 @@
+---
+- src: https://github.com/andrelohmann/ansible-role-root_colored_prompt
+  version: 1.0.0
+  name: andrelohmann.root_colored_prompt
+- src: https://github.com/andrelohmann/ansible-role-docker
+  version: 1.1.0
+  name: andrelohmann.docker
+- src: https://github.com/andrelohmann/ansible-role-terraform
+  version: 1.0.1
+  name: andrelohmann.terraform
+- src: https://github.com/andrelohmann/ansible-role-packer
+  version: 1.0.0
+  name: andrelohmann.packer
+- src: https://github.com/andrelohmann/ansible-role-mailhog
+  version: 1.0.3
+  name: andrelohmann.mailhog
+- src: https://github.com/andrelohmann/ansible-role-gitlab
+  version: 1.0.3
+  name: andrelohmann.gitlab
+- name: geerlingguy.java
+- name: geerlingguy.jenkins
+...
